@@ -30,6 +30,49 @@ Captured from the running stack (`docker compose up --build`), signed in as the 
 
 
 
+## Testing evidence
+
+Captured end-to-end against the live stack (`backend` on `:8080`, `frontend` on `:3000`)
+on 2026-10-23. Artifacts live in [`docs/evidence/`](./docs/evidence).
+
+### Frontend visual testing
+
+Signed in as `operation@test.com`, then exercised the dashboard: summary hero, the
+status filter (All → Failed), and merchant search — ending in a combined
+filter + search that narrows 48 records to one.
+
+![Frontend visual walkthrough](./docs/evidence/frontend-demo.gif)
+
+### API testing (Swagger UI)
+
+Driving the running API through its own Swagger UI at `http://localhost:8080/docs`:
+expand `POST /dashboard/v1/auth/login`, **Try it out** with real seeded credentials,
+**Execute** → live `200` with the issued JWT.
+
+![API walkthrough via Swagger UI](./docs/evidence/api-demo.gif)
+
+### API testing (curl transcript)
+
+Real request/response pairs for **all six** endpoints plus the two security-boundary
+negatives — a tokenless call (`401`) and a `cs` export attempt (`403`, RBAC). Full log:
+[`docs/evidence/api-test-transcript.md`](./docs/evidence/api-test-transcript.md).
+
+| # | Endpoint | Auth | Result |
+| - | -------- | ---- | ------ |
+| 1 | `GET /health` | public | `200` ok |
+| 2 | `POST /dashboard/v1/auth/login` (cs) | public | `200` + token |
+| 3 | `POST /dashboard/v1/auth/login` (operation) | public | `200` + token |
+| 4 | `GET /dashboard/v1/auth/me` | bearer | `200` identity |
+| 5 | `GET /dashboard/v1/payments?status=completed` | bearer | `200` paginated |
+| 6 | `GET /dashboard/v1/payments/summary` | bearer | `200` aggregates |
+| 7 | `GET /dashboard/v1/payments/export` (operation) | bearer | `200` full set |
+| 8 | `GET /dashboard/v1/payments/export` (cs) | bearer | `403` forbidden (RBAC) |
+| 9 | `GET /dashboard/v1/payments` (no token) | — | `401` unauthorized |
+
+---
+
+
+
 ## 1. Prerequisites
 
 
