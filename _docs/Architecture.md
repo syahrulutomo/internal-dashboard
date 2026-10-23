@@ -12,7 +12,7 @@ decisions.
 │  App Router · React 19   │   Bearer JWT on protected    │   chi router + OpenAPI   │
 │  TanStack Query · TW4    │   calls                      │   validator middleware   │
 │                          │  ◀───────────────────────   │                          │
-│  localStorage: token+role│   { code, message } errors   │   SQLite (dashboard.db)  │
+│  cookie: token+role      │   { code, message } errors   │   SQLite (dashboard.db)  │
 └──────────────────────────┘                             └──────────────────────────┘
                      ▲                                               ▲
                      └──────── openapi.yaml (single source) ─────────┘
@@ -222,9 +222,9 @@ Two kinds of state, cleanly separated:
   current rows on screen while the next page loads (no skeleton flash). `useLogin` is a
   mutation.
 - **Session state → external store + React context** (`libs/auth-storage.ts`,
-  `hooks/use-auth.tsx`). The JWT + role live in `localStorage`, exposed as a tiny
-  subscribable store the context reads via `useSyncExternalStore` — SSR-safe, with no
-  `setState`-in-effect hydration, and a `storage` listener that syncs logout across tabs.
+  `hooks/use-auth.tsx`). The JWT + role live in a non-HttpOnly `internal_token` cookie
+  (`SameSite=Lax`, `path=/`, 7-day max-age), exposed as a tiny subscribable store the context
+  reads via `useSyncExternalStore` — SSR-safe, with no `setState`-in-effect hydration.
   `hydrated` is itself a snapshot (`false` on the server, `true` after mount) so guards
   don't flash.
 - **UI/filter state → local `useState`** in `DashboardContainer` (`status`, `search`,
@@ -248,10 +248,11 @@ to show the summary.
 - There is **no** server-side/middleware route protection — guarding is client-side, which
   is acceptable because the API independently enforces auth on every protected call. A
   route-segment error boundary (`app/error.tsx`) catches unexpected render errors.
-- **Token storage trade-off:** the JWT lives in `localStorage` for a fully client-side SPA,
-  which is XSS-readable. React's escaping and no `dangerouslySetInnerHTML` mitigate this;
-  the hardened alternative (httpOnly, SameSite cookie set by the server) is the production
-  upgrade if/when the backend owns the session.
+- **Token storage trade-off:** the JWT lives in a non-HttpOnly `SameSite=Lax` cookie for a
+  fully client-side SPA, which is still XSS-readable (the client reads it to attach the bearer
+  token). React's escaping and no `dangerouslySetInnerHTML` mitigate this; the hardened
+  alternative (an **HttpOnly** cookie set by the server) is the production upgrade if/when the
+  backend owns the session.
 
 ### 4.5 OpenAPI integration
 The frontend consumes the same contract: request/response shapes in `libs/types.ts`

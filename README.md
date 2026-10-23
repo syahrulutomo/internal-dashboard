@@ -326,7 +326,7 @@ dataset (48 payments, users `cs@test.com` / `operation@test.com`).
 Tests live in `frontend/e2e/*.spec.ts` and are organised as Playwright **projects**:
 
 - **`setup`** (`auth.setup.ts`) — signs in once per role through the real UI and saves each
-  session (the bearer token in `localStorage`) to `e2e/.auth/*.json`. Authenticated specs
+  session (the `internal_token` cookie carrying the bearer JWT) to `e2e/.auth/*.json`. Authenticated specs
   reuse these, so the whole suite spends just two real logins — deliberate, because login is
   IP-rate-limited (burst of 5 / 10 min) and all tests share `localhost`. Hence `retries: 0`
   and `workers: 1`.
