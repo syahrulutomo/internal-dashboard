@@ -49,6 +49,21 @@ hidden, the `operation` project drives the download, and
 token to prove the server returns 200 / 403 / 401 (UI hiding is not the security
 boundary).
 
+## Component library (Storybook)
+
+```bash
+pnpm storybook        # dev server on :6006
+pnpm build-storybook  # static build into storybook-static/
+```
+
+Every component in `views/ui/` and `views/presentation/` has a `*.stories.tsx`
+co-located next to it, with an auto-generated docs page (props table + examples).
+Storybook runs on `@storybook/react-vite` (not `@storybook/nextjs`): those two
+layers are pure React with no `next/*` imports, which keeps Storybook decoupled
+from the Next toolchain. Containers (which use `next/navigation`) are out of scope.
+Tailwind v4 and the design tokens are loaded via `.storybook/preview.ts`
+(`app/globals.css`); shared sample data lives in `views/_stories/fixtures.ts`.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

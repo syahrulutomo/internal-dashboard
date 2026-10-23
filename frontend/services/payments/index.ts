@@ -49,8 +49,13 @@ export const paymentsQuery = {
     }),
 };
 
-export function usePayments(filter: PaymentsFilter = {}) {
-  return useQuery(paymentsQuery.options(filter));
+export function usePayments(
+  filter: PaymentsFilter = {},
+  options: { enabled?: boolean } = {},
+) {
+  // `enabled` lets the caller gate the fetch on an RBAC check (e.g. the
+  // payments:view permission) so we don't request rows a role may not see.
+  return useQuery({ ...paymentsQuery.options(filter), enabled: options.enabled });
 }
 
 // Export filter: only the status round-trips (export mirrors the list's status

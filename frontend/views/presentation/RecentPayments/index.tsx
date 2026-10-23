@@ -159,10 +159,8 @@ export function RecentPayments({
             <TableRow>
               <TableHeaderCell>Payment ID</TableHeaderCell>
               <TableHeaderCell>Merchant name</TableHeaderCell>
-              <TableHeaderCell sortable>Date</TableHeaderCell>
-              <TableHeaderCell align="right" sortable>
-                Amount
-              </TableHeaderCell>
+              <TableHeaderCell>Date</TableHeaderCell>
+              <TableHeaderCell align="right">Amount</TableHeaderCell>
               <TableHeaderCell>Status</TableHeaderCell>
             </TableRow>
           </TableHead>

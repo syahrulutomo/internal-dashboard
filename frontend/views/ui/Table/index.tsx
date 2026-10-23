@@ -5,7 +5,6 @@ import type {
   ThHTMLAttributes,
 } from "react";
 import { cn } from "@/libs/cn";
-import { SortIcon } from "@/views/ui/Icons";
 
 export function Table({
   className,
@@ -45,12 +44,10 @@ export function TableRow({
 export function TableHeaderCell({
   children,
   align = "left",
-  sortable,
   className,
   ...props
 }: ThHTMLAttributes<HTMLTableCellElement> & {
   align?: "left" | "right";
-  sortable?: boolean;
 }) {
   return (
     <th
@@ -62,15 +59,7 @@ export function TableHeaderCell({
       )}
       {...props}
     >
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5",
-          align === "right" && "flex-row-reverse",
-        )}
-      >
-        {children}
-        {sortable && <SortIcon className="size-3.5 text-gray-300" />}
-      </span>
+      {children}
     </th>
   );
 }

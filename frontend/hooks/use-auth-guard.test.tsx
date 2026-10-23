@@ -16,6 +16,15 @@ const { replace, authRef } = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 vi.mock("./use-auth", () => ({ useAuth: () => authRef.current }));
+// The guard cross-checks the synchronous auth store before redirecting (to
+// avoid bouncing a just-authenticated user while the context value lags a
+// render). In these unit tests the store mirrors the mocked auth state.
+vi.mock("@/libs/auth-storage", () => ({
+  getAuthSnapshot: () =>
+    authRef.current.isAuthenticated
+      ? { email: "u@test.com", role: "operation", token: "t" }
+      : null,
+}));
 
 beforeEach(() => {
   replace.mockReset();

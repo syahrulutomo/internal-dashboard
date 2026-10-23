@@ -4,9 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { paymentsExportQuery, usePayments } from "@/services/payments";
 import { useSummary } from "@/services/summary";
+import { useMe } from "@/services/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
 import { useCan } from "@/hooks/use-can";
+import { PERMISSIONS } from "@/libs/permissions";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/libs/api-client";
@@ -56,12 +58,16 @@ function downloadCsv(payments: Payment[]): void {
 const PAGE_SIZE = 10;
 
 export function DashboardContainer() {
-  const { user, logout } = useAuth();
+  const { user, setSession, logout } = useAuth();
   const { ready } = useAuthGuard("protected");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   // RBAC: only the operation role may export (enforced server-side too).
-  const canExport = useCan("payments:export");
+  const canExport = useCan(PERMISSIONS.PAYMENTS_EXPORT);
+  // RBAC: whether the current role may view the payments list.
+  const canViewPayments = useCan(PERMISSIONS.PAYMENTS_VIEW);
+  // RBAC: whether the current role may see the payments summary (hero widget).
+  const canViewSummary = useCan(PERMISSIONS.PAYMENTS_SUMMARY);
   const [status, setStatus] = useState<StatusFilterValue>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -91,23 +97,49 @@ export function DashboardContainer() {
   // GET /dashboard/v1/payments/summary — the single source for these figures.
   // (CSV export fetches the actual rows on demand in handleExport, so the
   // dashboard no longer eagerly pulls the full list just to show the summary.)
-  const summaryQuery = useSummary();
+  // Gated on the payments:summary permission so we don't fetch figures a role
+  // may not see (the hero is also hidden below).
+  const summaryQuery = useSummary({ enabled: canViewSummary });
+  // The authenticated user's identity from the server — the authoritative source
+  // of the role that RBAC (the Export CTA) keys off. We sync it back into the
+  // session below so `useCan` (which reads the session role) reflects the server,
+  // not a possibly-stale or tampered stored role.
+  // Only hit /auth/me once there's an authenticated session (a user in context);
+  // an unauthenticated call would just 401.
+  const meQuery = useMe({ enabled: Boolean(user) });
   // The table list round-trips the status filter and pagination to the API.
-  const tableQuery = usePayments({
-    status: status === "all" ? undefined : status,
-    search: debouncedSearch || undefined,
-    page,
-    perPage: PAGE_SIZE,
-  });
+  // Gated on the payments:view permission so we don't fetch rows a role may not
+  // see (the UI also hides the table below).
+  const tableQuery = usePayments(
+    {
+      status: status === "all" ? undefined : status,
+      search: debouncedSearch || undefined,
+      page,
+      perPage: PAGE_SIZE,
+    },
+    { enabled: canViewPayments },
+  );
 
   // A 401 from a protected call means the session is no longer valid — sign out.
   const authError =
     (summaryQuery.error instanceof ApiError &&
       summaryQuery.error.status === 401) ||
-    (tableQuery.error instanceof ApiError && tableQuery.error.status === 401);
+    (tableQuery.error instanceof ApiError && tableQuery.error.status === 401) ||
+    (meQuery.error instanceof ApiError && meQuery.error.status === 401);
   useEffect(() => {
     if (authError) logout();
   }, [authError, logout]);
+
+  // Reconcile the stored session with the server's view of the user. If the role
+  // (or email) has changed server-side, update the session so RBAC decisions use
+  // the authoritative value. No-ops once they match, so this can't loop.
+  const serverUser = meQuery.data;
+  useEffect(() => {
+    if (!user || !serverUser) return;
+    if (serverUser.role !== user.role || serverUser.email !== user.email) {
+      setSession({ ...user, email: serverUser.email, role: serverUser.role });
+    }
+  }, [serverUser, user, setSession]);
 
   // Surface a failed payments load as a toast (not an inline banner), with a
   // Retry action. 401s are excluded — they trigger logout above, not a toast.
@@ -225,20 +257,28 @@ export function DashboardContainer() {
         canExport={canExport}
       />
 
-      <PaymentsHero summary={summary} loading={summaryQuery.isPending} />
+      {canViewSummary && (
+        <PaymentsHero summary={summary} loading={summaryQuery.isPending} />
+      )}
 
-      <RecentPayments
-        payments={tablePayments}
-        meta={tableMeta}
-        onPageChange={setPage}
-        summary={summary}
-        status={status}
-        onStatusChange={handleStatusChange}
-        search={search}
-        onSearchChange={handleSearchChange}
-        loading={tableQuery.isPending}
-        isFetching={tableQuery.isFetching}
-      />
+      {canViewPayments ? (
+        <RecentPayments
+          payments={tablePayments}
+          meta={tableMeta}
+          onPageChange={setPage}
+          summary={summary}
+          status={status}
+          onStatusChange={handleStatusChange}
+          search={search}
+          onSearchChange={handleSearchChange}
+          loading={tableQuery.isPending}
+          isFetching={tableQuery.isFetching}
+        />
+      ) : (
+        <div className="rounded-2xl border border-[var(--border)] bg-white p-8 text-center text-sm text-[var(--muted)]">
+          You don&rsquo;t have permission to view the payments list.
+        </div>
+      )}
     </DashboardShell>
   );
 }

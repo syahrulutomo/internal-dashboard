@@ -5,7 +5,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ToastProvider } from "@/hooks/use-toast";
 import { Toaster } from "@/views/presentation/Toaster";
-import { clearAuth, getToken, saveAuth } from "@/libs/auth-storage";
+import {
+  clearAuth,
+  getAuthSnapshot,
+  getToken,
+  saveAuth,
+} from "@/libs/auth-storage";
 import { DashboardContainer } from "./index";
 import type { AuthUser } from "@/libs/types";
 
@@ -54,6 +59,11 @@ function ok(body: unknown) {
 // Routes fetch calls to the right fixture by URL.
 function routeByUrl(url: unknown) {
   const u = String(url);
+  // /auth/me mirrors the current session so the container's role-sync is a no-op.
+  if (u.includes("/auth/me")) {
+    const session = getAuthSnapshot() ?? user;
+    return Promise.resolve(ok({ email: session.email, role: session.role }));
+  }
   if (u.includes("/payments/summary")) return Promise.resolve(ok(summaryWire));
   if (u.includes("/payments")) return Promise.resolve(ok(paymentsResponse));
   return Promise.reject(new Error(`unexpected url: ${u}`));
@@ -92,6 +102,9 @@ afterEach(() => {
 
 describe("DashboardContainer", () => {
   it("renders the shell, summary and payments once data loads", async () => {
+    // The summary hero is gated on payments:summary (operation only), so sign in
+    // as operation to assert its widgets.
+    saveAuth({ ...user, role: "operation" });
     renderDashboard();
 
     expect(
@@ -99,11 +112,21 @@ describe("DashboardContainer", () => {
     ).toBeInTheDocument();
     // Summary-driven widgets.
     expect(await screen.findByText("Batik Arunika")).toBeInTheDocument();
-    expect(screen.getByText("Total payments")).toBeInTheDocument();
+    expect(await screen.findByText("Total payments")).toBeInTheDocument();
     // Total volume (hero) comes from the summary's mapped amount.
     expect(screen.getByText("Rp 1.250.000")).toBeInTheDocument();
     // Row amount formatted to IDR.
     expect(screen.getByText("Rp 175.500")).toBeInTheDocument();
+  });
+
+  it("hides the summary hero for a cs role (RBAC)", async () => {
+    // beforeEach seeds a cs session, which lacks payments:summary.
+    renderDashboard();
+    await screen.findByText("Batik Arunika");
+
+    expect(screen.queryByText("Total payments")).toBeNull();
+    // The hero's total-volume figure is absent too.
+    expect(screen.queryByText("Rp 1.250.000")).toBeNull();
   });
 
   it("refetches both queries when Refresh is clicked", async () => {
@@ -127,6 +150,9 @@ describe("DashboardContainer", () => {
   });
 
   it("logs out on a 401 from a protected call", async () => {
+    // Operation role so the summary call (gated on payments:summary) actually
+    // fires and can return the 401 under test.
+    saveAuth({ ...user, role: "operation" });
     fetchMock.mockImplementation((url: unknown) => {
       const u = String(url);
       if (u.includes("/payments/summary")) {
@@ -173,7 +199,11 @@ describe("DashboardContainer", () => {
       renderDashboard();
       await screen.findByText("Batik Arunika");
 
-      await userEvent.click(screen.getByRole("button", { name: /export csv/i }));
+      // The Export CTA appears once the async RBAC check resolves for the
+      // operation role.
+      await userEvent.click(
+        await screen.findByRole("button", { name: /export csv/i }),
+      );
 
       await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
       expect(clickSpy).toHaveBeenCalled();

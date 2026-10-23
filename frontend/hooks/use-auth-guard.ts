@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getAuthSnapshot } from "@/libs/auth-storage";
 import { useAuth } from "./use-auth";
 
 /**
@@ -18,10 +19,18 @@ export function useAuthGuard(mode: "protected" | "guest") {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (mode === "protected" && !isAuthenticated) {
+    // The redirect decision reads the synchronous auth store (ground truth),
+    // not only the React context value. Right after login/logout the context
+    // value can lag the store by a render while the Next router transition
+    // commits, which previously bounced a freshly-authenticated user back to
+    // /login. `getAuthSnapshot()` reflects `saveAuth`/`clearAuth` immediately
+    // (same source `apiFetch` reads via `getToken`), so the two must agree
+    // before we redirect.
+    const authedNow = Boolean(getAuthSnapshot());
+    if (mode === "protected" && !isAuthenticated && !authedNow) {
       router.replace("/login");
     }
-    if (mode === "guest" && isAuthenticated) {
+    if (mode === "guest" && isAuthenticated && authedNow) {
       router.replace("/dashboard");
     }
   }, [hydrated, isAuthenticated, mode, router]);

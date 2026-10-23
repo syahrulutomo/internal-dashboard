@@ -75,6 +75,24 @@ components:
         token:
           type: string
 
+    UserInfo:
+      type: object
+      description: >
+        The authenticated caller's identity, derived from the verified bearer
+        token. Unlike `User` it carries no token — `/auth/me` never echoes a
+        credential back to the client.
+      properties:
+        email:
+          type: string
+          example: "operation@test.com"
+        role:
+          type: string
+          description: "The caller's role. One of: cs, operation."
+          example: "operation"
+      required:
+        - email
+        - role
+
     PaginationMeta:
       type: object
       properties:
@@ -192,6 +210,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/User'
+    MeResponse:
+      description: The authenticated caller's identity (email and role)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UserInfo'
     PaymentListResponse:
       description: Payment List
       content:
@@ -318,6 +342,23 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         "429":
           $ref: '#/components/responses/TooManyRequestsError'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /dashboard/v1/auth/me:
+    get:
+      summary: Current authenticated user
+      description: >
+        Returns the identity (email and role) of the caller, derived from the
+        verified bearer token. The frontend uses this as the authoritative
+        source of the user's role for role-based UI decisions.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          $ref: '#/components/responses/MeResponse'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
         "500":
           $ref: '#/components/responses/InternalError'
 

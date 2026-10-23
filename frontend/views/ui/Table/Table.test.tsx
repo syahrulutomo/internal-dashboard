@@ -16,9 +16,7 @@ describe("Table", () => {
         <TableHead>
           <TableRow>
             <TableHeaderCell>Payment ID</TableHeaderCell>
-            <TableHeaderCell align="right" sortable>
-              Amount
-            </TableHeaderCell>
+            <TableHeaderCell align="right">Amount</TableHeaderCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -48,19 +46,5 @@ describe("Table", () => {
       </Table>,
     );
     expect(screen.getByRole("columnheader")).toHaveAttribute("scope", "col");
-  });
-
-  it("renders a sort affordance on sortable headers", () => {
-    const { container } = render(
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableHeaderCell sortable>Date</TableHeaderCell>
-          </TableRow>
-        </TableHead>
-      </Table>,
-    );
-    // The SortIcon renders an inline svg inside the header.
-    expect(container.querySelector("th svg")).toBeInTheDocument();
   });
 });

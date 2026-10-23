@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build artifacts / generated output — not source to lint.
+    "coverage/**",
+    "storybook-static/**",
   ]),
 ]);
 

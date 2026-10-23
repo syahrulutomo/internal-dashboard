@@ -39,6 +39,8 @@ export const summaryQuery = {
     }),
 };
 
-export function useSummary() {
-  return useQuery(summaryQuery.options());
+export function useSummary(options: { enabled?: boolean } = {}) {
+  // `enabled` lets the caller gate the fetch on an RBAC check (e.g. the
+  // payments:summary permission) so we don't request figures a role may not see.
+  return useQuery({ ...summaryQuery.options(), enabled: options.enabled });
 }

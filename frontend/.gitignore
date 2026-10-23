@@ -20,6 +20,10 @@
 /playwright/.cache/
 /e2e/.auth/
 
+# storybook
+/storybook-static/
+*storybook.log
+
 # next.js
 /.next/
 /out/

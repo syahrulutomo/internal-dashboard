@@ -32,6 +32,9 @@ beforeEach(() => {
   fetchMock.mockReset();
   clearAuth();
   window.localStorage.clear();
+  // Default session so protected (auth: true) calls have a token to attach;
+  // individual tests override or clear it as needed.
+  saveAuth({ email: "cs@test.com", role: "cs", token: "tok-default" });
 });
 
 afterEach(() => {
@@ -70,6 +73,17 @@ describe("apiFetch", () => {
 
     const headers = fetchMock.mock.calls[0][1].headers as Headers;
     expect(headers.get("Authorization")).toBe("Bearer tok-abc");
+  });
+
+  it("throws a 401 without sending the request when a protected call has no token", async () => {
+    clearAuth();
+
+    await expect(apiFetch("/protected")).rejects.toMatchObject({
+      name: "ApiError",
+      status: 401,
+    });
+    // No tokenless request is sent to the server.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("omits the Authorization header when auth is false", async () => {

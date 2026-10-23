@@ -2,7 +2,14 @@
 
 export type PaymentStatus = "completed" | "processing" | "failed";
 
-export type UserRole = "cs" | "operation";
+// The roles the backend issues in the JWT `role` claim. Use these constants
+// instead of the bare strings so role checks stay consistent across the app.
+export const ROLES = {
+  CS: "cs",
+  OPERATION: "operation",
+} as const;
+
+export type UserRole = (typeof ROLES)[keyof typeof ROLES];
 
 export interface Payment {
   id: string;
@@ -32,6 +39,14 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   token: string;
+}
+
+// Wire shape of GET /dashboard/v1/auth/me — the caller's identity derived from
+// the verified token (no token echoed back). The frontend treats this as the
+// authoritative source of the user's role for RBAC decisions.
+export interface UserInfo {
+  email: string;
+  role: UserRole;
 }
 
 export interface LoginRequest {

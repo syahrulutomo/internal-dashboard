@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/durianpay/fullstack-boilerplate/internal/entity"
+	mw "github.com/durianpay/fullstack-boilerplate/internal/middleware"
 	authUsecase "github.com/durianpay/fullstack-boilerplate/internal/module/auth/usecase"
 	"github.com/durianpay/fullstack-boilerplate/internal/openapigen"
 	"github.com/durianpay/fullstack-boilerplate/internal/transport"
@@ -34,6 +35,26 @@ func (a *AuthHandler) PostDashboardV1AuthLogin(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(openapigen.LoginResponse{Email: &user.Email, Role: &user.Role, Token: &token})
+	if err != nil {
+		transport.WriteAppError(w, entity.ErrorInternal("internal server error"))
+		return
+	}
+}
+
+// GetDashboardV1AuthMe handles GET /dashboard/v1/auth/me. It returns the
+// caller's identity (email + role) taken from the verified JWT claims injected
+// by the WithClaims middleware — no DB lookup, no token echoed back. The route
+// declares bearerAuth, so the validator rejects unauthenticated callers with a
+// 401 before this runs; the absent-claims branch is defensive, failing closed.
+func (a *AuthHandler) GetDashboardV1AuthMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := mw.ClaimsFromContext(r.Context())
+	if !ok {
+		transport.WriteAppError(w, entity.ErrorUnauthorized("missing or invalid token"))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(openapigen.UserInfo{Email: claims.Email, Role: claims.Role})
 	if err != nil {
 		transport.WriteAppError(w, entity.ErrorInternal("internal server error"))
 		return

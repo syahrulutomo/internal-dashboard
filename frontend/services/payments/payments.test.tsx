@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { paymentsQuery, usePayments, type PaymentsFilter } from "./index";
+import { clearAuth, saveAuth } from "@/libs/auth-storage";
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -18,10 +19,13 @@ const fetchMock = vi.fn();
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   fetchMock.mockReset();
+  // Protected endpoint — a session token must be present for apiFetch to send.
+  saveAuth({ email: "cs@test.com", role: "cs", token: "tok-test" });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  clearAuth();
 });
 
 describe("paymentsQuery", () => {

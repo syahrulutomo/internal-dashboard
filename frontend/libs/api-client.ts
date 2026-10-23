@@ -42,7 +42,14 @@ export async function apiFetch<T>(
   }
   if (auth) {
     const token = getToken();
-    if (token) finalHeaders.set("Authorization", `Bearer ${token}`);
+    // A protected call with no stored token is unauthorized by definition — fail
+    // fast locally instead of sending a tokenless request the server will 401.
+    // This avoids the confusing "no Authorization header" 401 that appears when
+    // the session is cleared mid-flight (e.g. logout triggered by another call).
+    if (!token) {
+      throw new ApiError(401, "Not authenticated: no session token.");
+    }
+    finalHeaders.set("Authorization", `Bearer ${token}`);
   }
 
   let res: Response;
