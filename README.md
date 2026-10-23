@@ -294,8 +294,21 @@ Covered: auth usecase (login, wrong password, unknown-user → 401), payment use
 cd frontend && pnpm test                     # or: pnpm test:watch
 ```
 
-Covered: pure formatters/`summarize` (currency, WIB dates, summary math), `LoginForm`
-(validation, trimming, password toggle, server-error display), and `StatusBadge`.
+Covered — 167 cases across 44 co-located spec files, spanning every architecture layer:
+
+- **`libs/`** — `apiFetch`/`ApiError` (bearer injection, network/`401` handling), `auth-storage`,
+  `format`/`summarize` (currency, WIB dates, summary math), `login-cooldown`, `permissions`
+  (`can()` RBAC), `cn`, `env`, `types`.
+- **`hooks/`** — `use-auth` + `use-auth-guard` (hydration, protected/guest redirects),
+  `use-can`, `use-debounced-value`, `use-login-cooldown`, `use-toast`.
+- **`services/`** (TanStack Query) — `auth`, `payments`, `summary` query/mutation hooks,
+  `providers`, and the shared `query-client`.
+- **`views/container/`** — `LoginContainer` and `DashboardContainer` (data fetching, auth,
+  filter/search state, `401` → `logout`).
+- **`views/presentation/` & `views/ui/`** — `LoginForm` (validation, trimming, password toggle,
+  server-error display), `StatusBadge`, dashboard shell/hero/header, `RecentPayments`, sidebar,
+  topbar, toaster, error banner, and the UI primitives (Button, Card, Input, Badge, Table,
+  Spinner, Skeleton, Icons).
 
 ### Frontend end-to-end — `pnpm test:e2e` (Playwright, real stack)
 
