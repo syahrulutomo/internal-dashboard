@@ -219,4 +219,62 @@ describe("DashboardContainer", () => {
       delete urlAny.revokeObjectURL;
     }
   });
+
+  // Routes /payments/export to `exportResponse`, everything else as usual.
+  function withExport(exportResponse: unknown) {
+    fetchMock.mockImplementation((url: unknown) => {
+      if (String(url).includes("/payments/export")) {
+        return Promise.resolve(exportResponse);
+      }
+      return routeByUrl(url);
+    });
+  }
+
+  async function clickExport() {
+    saveAuth({ ...user, role: "operation" });
+    renderDashboard();
+    await screen.findByText("Batik Arunika");
+    await userEvent.click(
+      await screen.findByRole("button", { name: /export csv/i }),
+    );
+  }
+
+  it("toasts 'Nothing to export' when no rows match the filter", async () => {
+    withExport(ok({ payments: [] }));
+    await clickExport();
+    expect(await screen.findByText("Nothing to export")).toBeInTheDocument();
+  });
+
+  it("toasts 'Not permitted' when the export endpoint returns 403", async () => {
+    withExport({
+      ok: false,
+      status: 403,
+      text: async () => JSON.stringify({ message: "forbidden" }),
+      json: async () => ({ message: "forbidden" }),
+    });
+    await clickExport();
+    expect(await screen.findByText("Not permitted")).toBeInTheDocument();
+  });
+
+  it("toasts 'Export failed' on a generic export error", async () => {
+    withExport({
+      ok: false,
+      status: 500,
+      text: async () => JSON.stringify({ message: "boom" }),
+      json: async () => ({ message: "boom" }),
+    });
+    await clickExport();
+    expect(await screen.findByText("Export failed")).toBeInTheDocument();
+  });
+
+  it("logs out when the export endpoint returns 401", async () => {
+    withExport({
+      ok: false,
+      status: 401,
+      text: async () => "",
+      json: async () => ({ message: "unauthorized" }),
+    });
+    await clickExport();
+    await waitFor(() => expect(getToken()).toBeNull());
+  });
 });

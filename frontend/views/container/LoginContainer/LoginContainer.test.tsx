@@ -96,6 +96,27 @@ describe("LoginContainer", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("shows a generic error toast for a non-ApiError failure", async () => {
+    // A 200 with a non-JSON body makes apiFetch's JSON.parse throw a
+    // SyntaxError — a non-ApiError, which surfaces the generic message.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "<<not json>>",
+      json: async () => ({}),
+    });
+
+    renderLogin();
+    await userEvent.type(screen.getByLabelText("Email"), "cs@test.com");
+    await userEvent.type(screen.getByLabelText("Password"), "password");
+    await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+    expect(
+      await screen.findByText("Something went wrong. Please try again."),
+    ).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
   it("starts a cooldown and locks the form on HTTP 429", async () => {
     fetchMock.mockResolvedValue(res({ ok: false, status: 429, body: {} }));
 

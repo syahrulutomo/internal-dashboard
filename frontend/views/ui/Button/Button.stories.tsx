@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, fn, userEvent, within } from "storybook/test";
 import { Button } from "./index";
 import { ArrowRightIcon, DownloadIcon } from "@/views/ui/Icons";
 
@@ -13,12 +14,12 @@ const meta = {
     size: { control: "inline-radio", options: ["sm", "md"] },
     loading: { control: "boolean" },
     disabled: { control: "boolean" },
-    onClick: { action: "clicked" },
   },
   args: {
     children: "Sign in",
     variant: "primary",
     size: "md",
+    onClick: fn(),
   },
 } satisfies Meta<typeof Button>;
 
@@ -36,6 +37,25 @@ export const Small: Story = { args: { size: "sm", children: "Export CSV" } };
 export const Loading: Story = { args: { loading: true, children: "Signing in…" } };
 
 export const Disabled: Story = { args: { disabled: true } };
+
+// Interaction: clicking an enabled button fires onClick.
+export const ClicksWhenEnabled: Story = {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Sign in" }));
+    await expect(args.onClick).toHaveBeenCalledTimes(1);
+  },
+};
+
+// Interaction: a disabled button does not fire onClick.
+export const IgnoresClickWhenDisabled: Story = {
+  args: { disabled: true },
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: "Sign in" }));
+    await expect(args.onClick).not.toHaveBeenCalled();
+  },
+};
 
 export const WithIcon: Story = {
   args: {

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, userEvent, within } from "storybook/test";
 import { Input } from "./index";
 import { EyeIcon, MailIcon } from "@/views/ui/Icons";
 
@@ -50,4 +51,14 @@ export const WithError: Story = {
 // Non-editable state.
 export const Disabled: Story = {
   args: { disabled: true, defaultValue: "you@company.id" },
+};
+
+// Interaction: typing updates the field value.
+export const Typing: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const field = canvas.getByLabelText("Email");
+    await userEvent.type(field, "you@company.id");
+    await expect(field).toHaveValue("you@company.id");
+  },
 };

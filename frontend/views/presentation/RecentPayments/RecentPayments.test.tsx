@@ -131,4 +131,21 @@ describe("RecentPayments", () => {
     await userEvent.click(within(nav).getByLabelText("Next page"));
     expect(props.onPageChange).toHaveBeenCalledWith(2);
   });
+
+  it("windows the page list with ellipses for many pages", () => {
+    // A middle page in a large range yields [1, …, 5, 6, 7, …, 12].
+    setup({ meta: { page: 6, per_page: 10, total: 120, total_pages: 12 } });
+    const nav = screen.getByRole("navigation", { name: /pagination/i });
+    // Ellipsis on both sides of the current window.
+    expect(within(nav).getAllByText("…")).toHaveLength(2);
+    // First and last pages are always shown; the window surrounds the current.
+    expect(within(nav).getByLabelText("Page 1")).toBeInTheDocument();
+    expect(within(nav).getByLabelText("Page 12")).toBeInTheDocument();
+    expect(within(nav).getByLabelText("Page 6")).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    // Pages far from the current window are collapsed into the ellipses.
+    expect(within(nav).queryByLabelText("Page 3")).not.toBeInTheDocument();
+  });
 });

@@ -44,6 +44,7 @@ const (
 	opEmail      = "operation@test.com"
 	opRole       = "operation"
 	loginPath    = "/dashboard/v1/auth/login"
+	mePath       = "/dashboard/v1/auth/me"
 	paymentsPath = "/dashboard/v1/payments"
 	exportPath   = "/dashboard/v1/payments/export"
 	summaryPath  = "/dashboard/v1/payments/summary"
@@ -282,6 +283,42 @@ func TestIntegration_Login(t *testing.T) {
 			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 		}
 		assertErrorBody(t, rec, http.StatusBadRequest)
+	})
+}
+
+// TestIntegration_AuthMe exercises GET /auth/me through the whole stack: the
+// validator enforces bearerAuth, WithClaims surfaces the token's claims, and the
+// handler echoes the caller's identity (never the token itself).
+func TestIntegration_AuthMe(t *testing.T) {
+	h := newTestHandler(t)
+
+	t.Run("no token is 401 (validator)", func(t *testing.T) {
+		rec := do(t, h, http.MethodGet, mePath, "", nil)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		assertErrorBody(t, rec, http.StatusUnauthorized)
+	})
+
+	t.Run("returns the caller's identity, per role, without echoing the token", func(t *testing.T) {
+		for _, tc := range []struct{ email, role string }{
+			{testEmail, testRole},
+			{opEmail, opRole},
+		} {
+			token := loginTokenAs(t, h, tc.email)
+			rec := do(t, h, http.MethodGet, mePath, "", bearer(token))
+			if rec.Code != http.StatusOK {
+				t.Fatalf("%s: status = %d, body = %s", tc.email, rec.Code, rec.Body.String())
+			}
+			var body map[string]any
+			decode(t, rec, &body)
+			if body["email"] != tc.email || body["role"] != tc.role {
+				t.Errorf("%s: body = %v, want email=%q role=%q", tc.email, body, tc.email, tc.role)
+			}
+			if _, ok := body["token"]; ok {
+				t.Errorf("%s: /me must not echo a token: %v", tc.email, body)
+			}
+		}
 	})
 }
 

@@ -28,4 +28,13 @@ describe("Topbar", () => {
     await userEvent.click(screen.getByRole("button", { name: /log out/i }));
     expect(onLogout).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back gracefully when the email yields no name", () => {
+    // Degenerate email: the local-part produces no name parts, so displayName
+    // falls back to the raw email ("") and initials to "?".
+    render(
+      <Topbar user={{ email: "", role: "cs", token: "tok" }} onLogout={vi.fn()} />,
+    );
+    expect(screen.getByText("?")).toBeInTheDocument();
+  });
 });

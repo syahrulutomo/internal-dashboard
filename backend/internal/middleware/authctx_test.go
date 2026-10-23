@@ -45,6 +45,26 @@ func TestWithClaims_InjectsVerifiedClaims(t *testing.T) {
 	}
 }
 
+func TestWithClaims_MissingStringClaimsBecomeEmpty(t *testing.T) {
+	// A valid token that omits sub/email still yields claims — the absent fields
+	// default to "" rather than panicking (claimString reads defensively).
+	token := signToken(t, jwt.MapClaims{
+		"role": "cs",
+		"exp":  time.Now().Add(time.Hour).Unix(),
+	}, nil, nil)
+
+	got, ok := captureClaims(t, "Bearer "+token)
+	if !ok {
+		t.Fatal("expected claims on context for a valid token")
+	}
+	if got.Role != "cs" {
+		t.Errorf("Role = %q, want cs", got.Role)
+	}
+	if got.Email != "" || got.UserID != "" {
+		t.Errorf("absent claims should be empty, got email=%q sub=%q", got.Email, got.UserID)
+	}
+}
+
 func TestWithClaims_NoClaimsWhenTokenAbsentOrInvalid(t *testing.T) {
 	validClaims := jwt.MapClaims{"role": "operation", "exp": time.Now().Add(time.Hour).Unix()}
 
