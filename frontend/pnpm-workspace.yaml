@@ -1,0 +1,7 @@
+# pnpm reads build-script approvals from here (not package.json's "pnpm" field).
+# These native/post-install builds are allowed so a clean `pnpm install` (e.g. in
+# Docker) doesn't fail with ERR_PNPM_IGNORED_BUILDS. esbuild backs Vitest;
+# unrs-resolver is pulled in by the ESLint config.
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true

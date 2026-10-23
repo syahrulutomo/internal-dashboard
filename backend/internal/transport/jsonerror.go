@@ -8,8 +8,10 @@ import (
 	"github.com/durianpay/fullstack-boilerplate/internal/entity"
 )
 
+// ErrorResponse matches the OpenAPI `Error` schema: an integer HTTP status
+// code and a human-readable message.
 type ErrorResponse struct {
-	Code    string      `json:"code"` // or int depending on your openapi
+	Code    int         `json:"code"`
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`
 }
@@ -18,6 +20,12 @@ func CodeToStatus(code entity.Code) int {
 	switch code {
 	case entity.ErrorCodeBadRequest:
 		return http.StatusBadRequest
+	case entity.ErrorCodeUnauthorized:
+		return http.StatusUnauthorized
+	case entity.ErrorCodeForbidden:
+		return http.StatusForbidden
+	case entity.ErrorCodeNotFound:
+		return http.StatusNotFound
 	default:
 		return http.StatusInternalServerError
 	}
@@ -28,7 +36,7 @@ func WriteAppError(w http.ResponseWriter, appErr *entity.AppError) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	resp := ErrorResponse{
-		Code:    string(appErr.Code),
+		Code:    status,
 		Message: appErr.Message,
 		Details: appErr.Details,
 	}
@@ -53,7 +61,7 @@ func WriteError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusInternalServerError)
 	err = json.NewEncoder(w).Encode(ErrorResponse{
-		Code:    string(entity.ErrorCodeInternal),
+		Code:    http.StatusInternalServerError,
 		Message: "internal error",
 	})
 	if err != nil {

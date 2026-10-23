@@ -1,0 +1,17 @@
+# Context for the backend image build (context = repo root, to include openapi.yaml).
+.git
+.gitignore
+_docs
+.claude/*
+**/.DS_Store
+
+# Frontend artefacts are not needed by the backend image.
+frontend/node_modules
+frontend/.next
+
+# Backend build/runtime artefacts and local secrets.
+backend/bin
+backend/.env
+backend/dashboard.db
+backend/dashboard.db-*
+backend/data

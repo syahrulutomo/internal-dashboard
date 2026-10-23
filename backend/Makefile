@@ -22,11 +22,14 @@ dep:
 run:
 	CGO_ENABLED=1 $(go_bin) run main.go
 
+test:
+	CGO_ENABLED=1 $(go_bin) test ./...
+
 build:
 	CGO_ENABLED=1 $(go_bin) build -o bin/mygolangapp main.go
 
 tool-openapi:
-	@go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+	@go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@v2.5.1
 
 openapi-gen: tool-openapi
 	@echo "generating openapi types/server (oapi-codegen v2)"

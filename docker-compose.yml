@@ -1,0 +1,58 @@
+# DurianPay Internal Dashboard — full stack.
+#
+#   docker compose up --build
+#
+# Brings up the Go API (:8080) and the Next.js dashboard (:3000). On its first
+# start the backend auto-creates the SQLite schema (migration) and seeds the
+# demo users + 48 payments — see main.go (initDB + seedPayments). The data is
+# stored on the `db-data` volume so it survives restarts; `docker compose down
+# -v` wipes it to force a fresh reseed.
+#
+# API calls are made from the browser, so the frontend is built to talk to the
+# backend on the host-published port (http://localhost:8080), not the
+# compose-internal hostname.
+
+services:
+  backend:
+    build:
+      # Context is the repo root so the image can include openapi.yaml.
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_ENV: development
+      HTTP_ADDR: ":8080"
+      DB_PATH: /app/data/dashboard.db
+      # Demo secret for local compose only. In production set a strong value
+      # (>= 32 bytes) and the app will refuse to boot without it.
+      JWT_SECRET: local-compose-dev-secret-change-me-0123456789
+      JWT_EXPIRED: 24h
+      CORS_ALLOWED_ORIGINS: http://localhost:3000
+    ports:
+      - "8080:8080"
+    volumes:
+      - db-data:/app/data
+    healthcheck:
+      # /ready returns 200 only once the DB is reachable (migrated + seeded).
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Inlined into the client bundle at build time (browser-reachable URL).
+        NEXT_PUBLIC_API_BASE_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:

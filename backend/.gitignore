@@ -30,3 +30,7 @@ tmp/
 .DS_Store
 
 dashboard.db
+# Throwaway SQLite DB seeded fresh for Playwright e2e runs (+ WAL sidecars)
+e2e.db
+e2e.db-wal
+e2e.db-shm

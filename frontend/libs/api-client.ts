@@ -1,0 +1,77 @@
+import { API_BASE_URL } from "./env";
+import { getToken } from "./auth-storage";
+
+// A normalized API error so the UI can render a consistent message and react to
+// auth failures (e.g. force a re-login on 401).
+export class ApiError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
+interface RequestOptions extends Omit<RequestInit, "body"> {
+  // When true, attaches the stored bearer token (default for protected calls).
+  auth?: boolean;
+  body?: unknown;
+  // query params appended to the URL, skipping null/undefined values.
+  params?: Record<string, string | undefined | null>;
+}
+
+function buildUrl(path: string, params?: RequestOptions["params"]): string {
+  const url = new URL(path, API_BASE_URL);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null && value !== "") {
+        url.searchParams.set(key, value);
+      }
+    }
+  }
+  return url.toString();
+}
+
+export async function apiFetch<T>(
+  path: string,
+  { auth = true, body, params, headers, ...init }: RequestOptions = {},
+): Promise<T> {
+  const finalHeaders = new Headers(headers);
+  if (body !== undefined) {
+    finalHeaders.set("Content-Type", "application/json");
+  }
+  if (auth) {
+    const token = getToken();
+    if (token) finalHeaders.set("Authorization", `Bearer ${token}`);
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, params), {
+      ...init,
+      headers: finalHeaders,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(0, "Unable to reach the server. Is the backend running?");
+  }
+
+  if (!res.ok) {
+    throw new ApiError(res.status, await extractErrorMessage(res));
+  }
+
+  // 204 / empty body safety.
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+async function extractErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    if (data && typeof data.message === "string") return data.message;
+  } catch {
+    // fall through to a status-based message
+  }
+  if (res.status === 401) return "Invalid credentials or session expired.";
+  return `Request failed with status ${res.status}`;
+}

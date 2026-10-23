@@ -26,17 +26,59 @@ const (
 
 // Error defines model for Error.
 type Error struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	// Code HTTP status code, repeated in the body for convenience.
+	Code int `json:"code"`
+
+	// Details Optional machine-readable context about the error. Omitted when the server has nothing extra to attach.
+	Details interface{} `json:"details"`
+	Message string      `json:"message"`
+}
+
+// Health defines model for Health.
+type Health struct {
+	Status string    `json:"status"`
+	Time   time.Time `json:"time"`
+}
+
+// PaginationMeta defines model for PaginationMeta.
+type PaginationMeta struct {
+	Page    int `json:"page"`
+	PerPage int `json:"per_page"`
+
+	// Total Total number of items matching the filter across all pages.
+	Total      int `json:"total"`
+	TotalPages int `json:"total_pages"`
 }
 
 // Payment defines model for Payment.
 type Payment struct {
+	// Amount Payment amount as a fixed 2-decimal string, in IDR.
 	Amount    *string    `json:"amount,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	Id        *string    `json:"id,omitempty"`
 	Merchant  *string    `json:"merchant,omitempty"`
-	Status    *string    `json:"status,omitempty"`
+
+	// Status Payment status. One of: completed, processing, failed.
+	Status *string `json:"status,omitempty"`
+}
+
+// Summary Aggregate figures across all payments, used to render the dashboard summary widget (counts and settled/pending/failed volume per status).
+type Summary struct {
+	// AmountByStatus Volume per status, each as a decimal string.
+	AmountByStatus struct {
+		Completed  string `json:"completed"`
+		Failed     string `json:"failed"`
+		Processing string `json:"processing"`
+	} `json:"amount_by_status"`
+	Completed  int `json:"completed"`
+	Failed     int `json:"failed"`
+	Processing int `json:"processing"`
+
+	// Total Total number of payments.
+	Total int `json:"total"`
+
+	// TotalAmount Total volume across all payments, as a decimal string.
+	TotalAmount string `json:"total_amount"`
 }
 
 // User defines model for User.
@@ -46,16 +88,41 @@ type User struct {
 	Token *string `json:"token,omitempty"`
 }
 
+// Page defines model for page.
+type Page = int
+
+// PerPage defines model for perPage.
+type PerPage = int
+
 // Sort defines model for sort.
 type Sort = string
+
+// BadRequestError defines model for BadRequestError.
+type BadRequestError = Error
+
+// ForbiddenError defines model for ForbiddenError.
+type ForbiddenError = Error
+
+// HealthResponse defines model for HealthResponse.
+type HealthResponse = Health
+
+// InternalError defines model for InternalError.
+type InternalError = Error
 
 // LoginResponse defines model for LoginResponse.
 type LoginResponse = User
 
 // PaymentListResponse defines model for PaymentListResponse.
 type PaymentListResponse struct {
-	Payments *[]Payment `json:"payments,omitempty"`
+	Meta     *PaginationMeta `json:"meta,omitempty"`
+	Payments *[]Payment      `json:"payments,omitempty"`
 }
+
+// SummaryResponse Aggregate figures across all payments, used to render the dashboard summary widget (counts and settled/pending/failed volume per status).
+type SummaryResponse = Summary
+
+// TooManyRequestsError defines model for TooManyRequestsError.
+type TooManyRequestsError = Error
 
 // UnauthorizedError defines model for UnauthorizedError.
 type UnauthorizedError = Error
@@ -71,11 +138,26 @@ type GetDashboardV1PaymentsParams struct {
 	// Sort Comma-separated sort fields. Common patterns: `-created_at` (prefix `-` = desc) `amount` (no prefix `-` = asc)
 	Sort *Sort `form:"sort,omitempty" json:"sort,omitempty"`
 
+	// Page 1-based page number.
+	Page *Page `form:"page,omitempty" json:"page,omitempty"`
+
+	// PerPage Number of items per page.
+	PerPage *PerPage `form:"per_page,omitempty" json:"per_page,omitempty"`
+
 	// Status status of payment (completed , processing , or failed)
 	Status *string `form:"status,omitempty" json:"status,omitempty"`
 
 	// Id payment id
 	Id *string `form:"id,omitempty" json:"id,omitempty"`
+
+	// Search Free-text search matching a partial payment id or merchant name (case-insensitive).
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+}
+
+// GetDashboardV1PaymentsExportParams defines parameters for GetDashboardV1PaymentsExport.
+type GetDashboardV1PaymentsExportParams struct {
+	// Status status of payment (completed , processing , or failed)
+	Status *string `form:"status,omitempty" json:"status,omitempty"`
 }
 
 // PostDashboardV1AuthLoginJSONRequestBody defines body for PostDashboardV1AuthLogin for application/json ContentType.
@@ -89,6 +171,15 @@ type ServerInterface interface {
 	// List of payments
 	// (GET /dashboard/v1/payments)
 	GetDashboardV1Payments(w http.ResponseWriter, r *http.Request, params GetDashboardV1PaymentsParams)
+	// Export payments (operation role only)
+	// (GET /dashboard/v1/payments/export)
+	GetDashboardV1PaymentsExport(w http.ResponseWriter, r *http.Request, params GetDashboardV1PaymentsExportParams)
+	// Payments summary widget
+	// (GET /dashboard/v1/payments/summary)
+	GetDashboardV1PaymentsSummary(w http.ResponseWriter, r *http.Request)
+	// Liveness healthcheck
+	// (GET /health)
+	GetHealth(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -104,6 +195,24 @@ func (_ Unimplemented) PostDashboardV1AuthLogin(w http.ResponseWriter, r *http.R
 // List of payments
 // (GET /dashboard/v1/payments)
 func (_ Unimplemented) GetDashboardV1Payments(w http.ResponseWriter, r *http.Request, params GetDashboardV1PaymentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Export payments (operation role only)
+// (GET /dashboard/v1/payments/export)
+func (_ Unimplemented) GetDashboardV1PaymentsExport(w http.ResponseWriter, r *http.Request, params GetDashboardV1PaymentsExportParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Payments summary widget
+// (GET /dashboard/v1/payments/summary)
+func (_ Unimplemented) GetDashboardV1PaymentsSummary(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Liveness healthcheck
+// (GET /health)
+func (_ Unimplemented) GetHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -152,6 +261,22 @@ func (siw *ServerInterfaceWrapper) GetDashboardV1Payments(w http.ResponseWriter,
 		return
 	}
 
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "page", r.URL.Query(), &params.Page)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "per_page" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "per_page", r.URL.Query(), &params.PerPage)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "per_page", Err: err})
+		return
+	}
+
 	// ------------- Optional query parameter "status" -------------
 
 	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
@@ -168,8 +293,83 @@ func (siw *ServerInterfaceWrapper) GetDashboardV1Payments(w http.ResponseWriter,
 		return
 	}
 
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "search", r.URL.Query(), &params.Search)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetDashboardV1Payments(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDashboardV1PaymentsExport operation middleware
+func (siw *ServerInterfaceWrapper) GetDashboardV1PaymentsExport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetDashboardV1PaymentsExportParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "status", r.URL.Query(), &params.Status)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDashboardV1PaymentsExport(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetDashboardV1PaymentsSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetDashboardV1PaymentsSummary(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetDashboardV1PaymentsSummary(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetHealth operation middleware
+func (siw *ServerInterfaceWrapper) GetHealth(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetHealth(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -298,6 +498,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/dashboard/v1/payments", wrapper.GetDashboardV1Payments)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/dashboard/v1/payments/export", wrapper.GetDashboardV1PaymentsExport)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/dashboard/v1/payments/summary", wrapper.GetDashboardV1PaymentsSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/health", wrapper.GetHealth)
+	})
 
 	return r
 }
@@ -305,22 +514,47 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/6RW227bRhD9lcW0DzFKi1KTh4BAgbq3IIUDGG3dPrhGteaOpE25l8wunaiG/r2YXUoi",
-	"TQo2kieJ3LmcM2dmuA9QO+OdRRsDVA/gJUmDESk9BUeRfxWGmrSP2lmo4EdnjDwPyLYRlWArsdLYqDAT",
-	"fOis8DJGJBsqsTyvCdnuHxmX4oUnXOlPYnm+FN8JjnsmltK41vKhdWJwLkN99reFAjTn/dAibaEAKw1C",
-	"lcEVEOoNGsko8ZM0vuGjXkooIG59so+k7Rp2u10BhME7GzCxvHRrbX/r3vCL2tmINjGX3je6lsy8fB+Y",
-	"/kMv49eEK6jgq/JYxDKfhvI6IOVkw+oRxpasiO5ftEJaJdqAJLRdOTIpD+wKuJJbgzZe6hA/C5gn55Gi",
-	"xk7UFC391xFNeAp7l56RdMWTRHILu+MLd/ce6zhFsHMWDJ4jXFvZxo0j/R+qn4kcPYNJJ2UC2iZ/tJGN",
-	"UCWirTGStlDBOx2CtmvhuIT3stEqVxYKuJdN21VNIVSv5osCDIYg14z/ehi1EuZUpETxeZpnehM1uTjm",
-	"0s6KldQNKk61z1oTKjaQTYBjvsT/ULOhqJlVr+sTwU4dbSOuuf96lPsD8nz24/Hh6fnQamIpbjKMY5bb",
-	"UYMcmnlMIc/9EJlsdI3fd8+z2pkxggJ64109QJ4cqEDJiOdRG5zy0WqYaDFlZJDqjXyM6V33VlxM+YQo",
-	"YxuGHtwbDfJyLIQnV2OubsH1zeJPFnZUurRERnVDI3XDf0ZYyDU4eZDFHJ9MDHQBAeuWdNz+zk2YU96h",
-	"JCRu4+PTL/u6//rXH/tFzJHy6ZHgJkafh4K3XAKhYy7s9o27lHZ94b24uHrLQ4sU8sgsZvPZnKE7j1Z6",
-	"DRW8nM1nL6EAL+MmoSqVDJs7J0mV94uSW7pseJmnkrmQZOTCpal7q3g5uRB/2jv9uWBCaf1D7moM8Qen",
-	"tl+wa09r42UIHx2paRX6M5Vj9DxuJ9fu0SVSi4+/at/O56fW1cGuHH76dgW8mi+e9hpv9NQ1h6WcooqP",
-	"Om5EoiK+EQcqbDmUrf91WuOEZm+wL9nV3rwYXFZupkEfTcp0X9gVj28zeXyFW4kOiHjx9PSenbqT5F3Q",
-	"/16MpH4MYJ9WqxNB08HpgLefI/zUBeML5e+WRpKivy5ubhlirzt0iL1yh+4Di3S/F7KlplsbVVk2rpbN",
-	"xoVYvZ6/nsPudvd/AAAA//+YrKvUtAoAAA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -12,6 +12,7 @@ const (
 	ErrorCodeInternal     Code = "internal_error"
 	ErrorCodeNotFound     Code = "not_found"
 	ErrorCodeUnauthorized Code = "unauthorized"
+	ErrorCodeForbidden    Code = "forbidden"
 	ErrorCodeBadRequest   Code = "bad_request"
 )
 
@@ -43,5 +44,6 @@ func WrapError(err error, code Code, message string) *AppError {
 // Convenience constructors
 func ErrorNotFound(msg string) *AppError     { return NewError(ErrorCodeNotFound, msg) }
 func ErrorUnauthorized(msg string) *AppError { return NewError(ErrorCodeUnauthorized, msg) }
+func ErrorForbidden(msg string) *AppError    { return NewError(ErrorCodeForbidden, msg) }
 func ErrorInternal(msg string) *AppError     { return NewError(ErrorCodeInternal, msg) }
 func ErrorBadRequest(msg string) *AppError   { return NewError(ErrorCodeBadRequest, msg) }

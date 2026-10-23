@@ -1,6 +1,6 @@
 openapi: 3.0.3
 info:
-  title: MyGoLangApp API
+  title: DurianPay Internal API
   version: "1.0.0"
 servers:
   - url: http://localhost:8080
@@ -23,6 +23,27 @@ components:
       schema:
         type: string
         example: "-created_at"
+    page:
+      name: page
+      in: query
+      description: 1-based page number.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+        example: 1
+    perPage:
+      name: per_page
+      in: query
+      description: Number of items per page.
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+        example: 20
 
   schemas:
     Error:
@@ -30,10 +51,16 @@ components:
       properties:
         code:
           type: integer
+          description: HTTP status code, repeated in the body for convenience.
           example: 401
         message:
           type: string
           example: "Unauthenticated: missing or invalid token"
+        details:
+          description: >
+            Optional machine-readable context about the error. Omitted when the
+            server has nothing extra to attach.
+          nullable: true
       required:
         - code
         - message
@@ -48,6 +75,41 @@ components:
         token:
           type: string
 
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          description: Total number of items matching the filter across all pages.
+          example: 48
+        total_pages:
+          type: integer
+          example: 3
+      required:
+        - page
+        - per_page
+        - total
+        - total_pages
+
+    Health:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        time:
+          type: string
+          format: date-time
+      required:
+        - status
+        - time
+
     Payment:
       type: object
       properties:
@@ -59,15 +121,71 @@ components:
           example: "Merchant A"
         status:
           type: string
-          example: "completed , processing , or failed"
+          description: "Payment status. One of: completed, processing, failed."
+          example: "completed"
         amount:
           type: string
-          example: "alice@example.com"
+          description: Payment amount as a fixed 2-decimal string, in IDR.
+          example: "1982.00"
         created_at:
           type: string
           format: date-time
 
+    Summary:
+      type: object
+      description: >
+        Aggregate figures across all payments, used to render the dashboard
+        summary widget (counts and settled/pending/failed volume per status).
+      properties:
+        total:
+          type: integer
+          description: Total number of payments.
+          example: 48
+        completed:
+          type: integer
+          example: 29
+        processing:
+          type: integer
+          example: 12
+        failed:
+          type: integer
+          example: 7
+        total_amount:
+          type: string
+          description: Total volume across all payments, as a decimal string.
+          example: "182450.00"
+        amount_by_status:
+          type: object
+          description: Volume per status, each as a decimal string.
+          properties:
+            completed:
+              type: string
+              example: "120300.00"
+            processing:
+              type: string
+              example: "48150.00"
+            failed:
+              type: string
+              example: "14000.00"
+          required:
+            - completed
+            - processing
+            - failed
+      required:
+        - total
+        - completed
+        - processing
+        - failed
+        - total_amount
+        - amount_by_status
+
   responses:
+    HealthResponse:
+      description: Service is healthy
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Health'
     LoginResponse:
       description: return token and user information
       content:
@@ -85,6 +203,14 @@ components:
                 type: array
                 items:
                   $ref: '#/components/schemas/Payment'
+              meta:
+                $ref: '#/components/schemas/PaginationMeta'
+    SummaryResponse:
+      description: Payments summary
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Summary'
     UnauthorizedError:
       description: Authentication failed or missing credentials
       content:
@@ -97,8 +223,77 @@ components:
               value:
                 code: 401
                 message: "Unauthenticated: missing or invalid token"
+    ForbiddenError:
+      description: >
+        The caller is authenticated but their role is not permitted to perform
+        this action (e.g. a `cs` user attempting a payments export, which is
+        restricted to the `operation` role).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            forbidden:
+              summary: Role not permitted
+              value:
+                code: 403
+                message: "forbidden: exporting payments requires the operation role"
+    BadRequestError:
+      description: >
+        The request was malformed — e.g. an invalid JSON body or a query
+        parameter that failed spec validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidBody:
+              summary: Malformed request body
+              value:
+                code: 400
+                message: "invalid json: unexpected end of JSON input"
+    TooManyRequestsError:
+      description: >
+        Rate limit exceeded. Sensitive endpoints (login) are throttled per
+        client IP; retry after the period indicated by the Retry-After header.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+            example: 60
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            rateLimited:
+              summary: Too many attempts
+              value:
+                code: 429
+                message: "too many requests, please try again later"
+    InternalError:
+      description: An unexpected error occurred while processing the request.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            internal:
+              summary: Internal server error
+              value:
+                code: 500
+                message: "internal error"
 
 paths:
+  /health:
+    get:
+      summary: Liveness healthcheck
+      description: Public endpoint used by load balancers and orchestrators to verify the service is up. Requires no authentication.
+      responses:
+        "200":
+          $ref: '#/components/responses/HealthResponse'
+
   /dashboard/v1/auth/login:
     post:
       summary: Login with email + password
@@ -117,14 +312,38 @@ paths:
       responses:
         "200":
           $ref: '#/components/responses/LoginResponse'
+        "400":
+          $ref: '#/components/responses/BadRequestError'
         "401":
           $ref: '#/components/responses/UnauthorizedError'
+        "429":
+          $ref: '#/components/responses/TooManyRequestsError'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /dashboard/v1/payments/summary:
+    get:
+      summary: Payments summary widget
+      description: >
+        Aggregate counts and volume across all payments, powering the dashboard
+        summary cards. Takes no filters — it always reflects the full dataset.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          $ref: '#/components/responses/SummaryResponse'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          $ref: '#/components/responses/InternalError'
 
   /dashboard/v1/payments:
     get:
       summary: List of payments
       parameters:
         - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/perPage'
         - in: query
           name: status
           schema:
@@ -135,11 +354,51 @@ paths:
           schema:
             type: string
           description: payment id
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: >
+            Free-text search matching a partial payment id or merchant name
+            (case-insensitive).
       security:
         - bearerAuth: []
       responses:
         "200":
           $ref: '#/components/responses/PaymentListResponse'
+        "400":
+          $ref: '#/components/responses/BadRequestError'
         "401":
           $ref: '#/components/responses/UnauthorizedError'
+        "500":
+          $ref: '#/components/responses/InternalError'
+
+  /dashboard/v1/payments/export:
+    get:
+      summary: Export payments (operation role only)
+      description: >
+        Returns the full set of payments matching the status filter for offline
+        reconciliation, in one response (not paginated like the list endpoint).
+        This action is role-restricted: only users with the `operation` role may
+        call it; a `cs` user receives 403. The result set is capped at 100 rows,
+        matching the maximum page size of the list endpoint.
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+          description: status of payment (completed , processing , or failed)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          $ref: '#/components/responses/PaymentListResponse'
+        "400":
+          $ref: '#/components/responses/BadRequestError'
+        "401":
+          $ref: '#/components/responses/UnauthorizedError'
+        "403":
+          $ref: '#/components/responses/ForbiddenError'
+        "500":
+          $ref: '#/components/responses/InternalError'
 

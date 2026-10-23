@@ -1,0 +1,8 @@
+node_modules
+.next
+Dockerfile
+.dockerignore
+.git
+.env*
+**/.DS_Store
+coverage
