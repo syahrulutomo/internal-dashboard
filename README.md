@@ -33,7 +33,7 @@ Captured from the running stack (`docker compose up --build`), signed in as the 
 ## Testing evidence
 
 Captured end-to-end against the live stack (`backend` on `:8080`, `frontend` on `:3000`)
-on 2026-10-23. Artifacts live in [`docs/evidence/`](./docs/evidence).
+on 2026-10-23. Artifacts live in `[docs/evidence/](./docs/evidence)`.
 
 ### Frontend visual testing
 
@@ -55,19 +55,21 @@ expand `POST /dashboard/v1/auth/login`, **Try it out** with real seeded credenti
 
 Real request/response pairs for **all six** endpoints plus the two security-boundary
 negatives — a tokenless call (`401`) and a `cs` export attempt (`403`, RBAC). Full log:
-[`docs/evidence/api-test-transcript.md`](./docs/evidence/api-test-transcript.md).
+`[docs/evidence/api-test-transcript.md](./docs/evidence/api-test-transcript.md)`.
 
-| # | Endpoint | Auth | Result |
-| - | -------- | ---- | ------ |
-| 1 | `GET /health` | public | `200` ok |
-| 2 | `POST /dashboard/v1/auth/login` (cs) | public | `200` + token |
-| 3 | `POST /dashboard/v1/auth/login` (operation) | public | `200` + token |
-| 4 | `GET /dashboard/v1/auth/me` | bearer | `200` identity |
-| 5 | `GET /dashboard/v1/payments?status=completed` | bearer | `200` paginated |
-| 6 | `GET /dashboard/v1/payments/summary` | bearer | `200` aggregates |
-| 7 | `GET /dashboard/v1/payments/export` (operation) | bearer | `200` full set |
-| 8 | `GET /dashboard/v1/payments/export` (cs) | bearer | `403` forbidden (RBAC) |
-| 9 | `GET /dashboard/v1/payments` (no token) | — | `401` unauthorized |
+
+| #   | Endpoint                                        | Auth   | Result                 |
+| --- | ----------------------------------------------- | ------ | ---------------------- |
+| 1   | `GET /health`                                   | public | `200` ok               |
+| 2   | `POST /dashboard/v1/auth/login` (cs)            | public | `200` + token          |
+| 3   | `POST /dashboard/v1/auth/login` (operation)     | public | `200` + token          |
+| 4   | `GET /dashboard/v1/auth/me`                     | bearer | `200` identity         |
+| 5   | `GET /dashboard/v1/payments?status=completed`   | bearer | `200` paginated        |
+| 6   | `GET /dashboard/v1/payments/summary`            | bearer | `200` aggregates       |
+| 7   | `GET /dashboard/v1/payments/export` (operation) | bearer | `200` full set         |
+| 8   | `GET /dashboard/v1/payments/export` (cs)        | bearer | `403` forbidden (RBAC) |
+| 9   | `GET /dashboard/v1/payments` (no token)         | —      | `401` unauthorized     |
+
 
 ---
 
@@ -193,6 +195,51 @@ to reseed:
 / ~15% failed, with amounts and timestamps spread over ~30 days so the summary and
 filters are meaningful.
 
+> **`dashboard.db` is gitignored on purpose — and you never need to ship it.** The backend
+> **creates and seeds the database itself on first run** against an empty DB (`main.go`
+> builds the schema, then seeds the two users + 48 payments). So on any machine — a fresh
+> `git clone`, a teammate's laptop, CI, or a Docker container — the file is generated
+> locally on first boot. Nothing to copy, nothing to import.
+>
+> **Running with Docker?** First `docker compose up --build` runs that same migration + seed
+> automatically. The generated file lives on the `db-data` volume at `/app/data/dashboard.db`
+> inside the container and survives restarts. Run `docker compose down -v` to wipe the volume
+> and force a fresh reseed on the next start.
+
+### Inspecting `dashboard.db` in SQLite
+
+Once the backend has run at least once, the generated DB is a plain SQLite file you can open
+with the `sqlite3` CLI to inspect the seeded users and payments.
+
+**Local run** — the file is at `backend/dashboard.db`:
+
+```bash
+sqlite3 backend/dashboard.db
+```
+
+**Docker run** — the file lives on the `db-data` volume inside the container, so copy it out
+first, then open the copy:
+
+```bash
+docker compose cp backend:/app/data/dashboard.db ./dashboard.db
+sqlite3 ./dashboard.db
+```
+
+Once inside the `sqlite3` shell:
+
+```sql
+.tables                         -- list tables (users, payments)
+.schema payments                -- show a table's schema
+SELECT email, role FROM users;  -- the two seeded accounts
+SELECT status, COUNT(*) FROM payments GROUP BY status;
+.quit
+```
+
+> Want the seed in a different SQLite file (e.g. to prime another environment from an
+> already-seeded DB rather than re-running the app)? Dump and replay it —
+> `sqlite3 dashboard.db .dump > seed.sql`, then `sqlite3 target.db < seed.sql`. This is
+> optional; normally you just let the backend seed itself.
+
 ---
 
 
@@ -206,8 +253,9 @@ filters are meaningful.
 ```bash
 cd backend
 make build                  # → ./bin/mygolangapp
-APP_ENV=production JWT_SECRET=<32+ byte secret> \
-  CORS_ALLOWED_ORIGINS=https://your-frontend ./bin/mygolangapp
+APP_ENV=production JWT_SECRET=<32+ byte secret>
+CORS_ALLOWED_ORIGINS=https://your-frontend
+./bin/mygolangapp
 ```
 
 
@@ -249,7 +297,52 @@ cd frontend && pnpm test                     # or: pnpm test:watch
 Covered: pure formatters/`summarize` (currency, WIB dates, summary math), `LoginForm`
 (validation, trimming, password toggle, server-error display), and `StatusBadge`.
 
+### Frontend end-to-end — `pnpm test:e2e` (Playwright, real stack)
 
+```bash
+cd frontend && pnpm test:e2e                 # or: pnpm test:e2e:ui (headed, interactive)
+```
+
+Unlike the Vitest layer (jsdom, mocked), the e2e suite drives the **real** stack — the Go
+API and the Next.js dashboard wired exactly as in production. Playwright boots both itself
+via its `webServer` block (`playwright.config.ts`), so the command is self-contained — no
+manual server juggling. The backend runs against a throwaway SQLite file (`backend/e2e.db`)
+that is deleted and reseeded before every run, so each run starts from the same fixed
+dataset (48 payments, users `cs@test.com` / `operation@test.com`).
+
+Tests live in `frontend/e2e/*.spec.ts` and are organised as Playwright **projects**:
+
+- **`setup`** (`auth.setup.ts`) — signs in once per role through the real UI and saves each
+  session (the bearer token in `localStorage`) to `e2e/.auth/*.json`. Authenticated specs
+  reuse these, so the whole suite spends just two real logins — deliberate, because login is
+  IP-rate-limited (burst of 5 / 10 min) and all tests share `localhost`. Hence `retries: 0`
+  and `workers: 1`.
+- **`guest`** (`*.guest.spec.ts`) — signed-out journeys: route guards/redirects, the login
+  form (empty-form validation, invalid credentials, happy path), and a tampered/expired-token
+  rejection → forced re-login.
+- **`cs`** (`*.cs.spec.ts`) — dashboard as a CS user: summary + first page, status-tab
+  filtering, debounced server-side merchant search, pagination, logout re-guard, and the
+  **absence** of the Export CSV CTA (RBAC, UI side).
+- **`operation`** (`*.operation.spec.ts`) — Operation-role export: the Export CTA downloads a
+  CSV, plus direct API-enforcement checks — operation token `200`, cs token `403`, no token
+  `401` — proving the server, not just the UI, is the RBAC boundary.
+
+### Frontend component docs — Storybook (`pnpm storybook`)
+
+```bash
+cd frontend && pnpm storybook                # dev server on http://localhost:6006
+cd frontend && pnpm build-storybook          # static build → storybook-static/
+```
+
+Storybook documents the **design system** — the dumb/presentational layers `views/ui/`
+(Button, Card, Input, Badge, Table, Spinner, Skeleton, Icons) and `views/presentation/`
+(LoginForm, PaymentsHero, StatusBadge, Sidebar, Topbar, etc.). Stories are co-located as
+`*.stories.tsx` next to each component. It runs on the **`@storybook/react-vite`** framework
+(not `@storybook/nextjs`): those two layers are pure React with no `next/*` imports, so
+Storybook stays decoupled from the Next 16 toolchain. Smart **containers** (which use
+`next/navigation` + data fetching) are intentionally out of scope. The Vite config
+(`.storybook/main.ts`) wires in Tailwind v4 and the `@/*` path alias so components render
+exactly as they do in the app.
 
 ---
 

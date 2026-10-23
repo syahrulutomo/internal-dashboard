@@ -22,19 +22,16 @@ test("renders the signed-in user, summary and first page of payments", async ({
   await expect(page.getByText(CS_USER.displayName).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
 
-  // Summary counts (hero + tab badges) reflect the full seeded dataset.
-  await expect(page.getByRole("tab", { name: "All" })).toContainText(
-    String(SEED.total),
-  );
-  await expect(page.getByRole("tab", { name: "Completed" })).toContainText(
-    String(SEED.completed),
-  );
-  await expect(page.getByRole("tab", { name: "Processing" })).toContainText(
-    String(SEED.processing),
-  );
-  await expect(page.getByRole("tab", { name: "Failed" })).toContainText(
-    String(SEED.failed),
-  );
+  // The status filter tabs are present (labels only — no count badge).
+  await expect(page.getByRole("tab", { name: "All" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Completed" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Processing" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Failed" })).toBeVisible();
+
+  // The summary hero (with its per-status counts) is gated on the
+  // `payments:summary` permission, which the cs role does NOT hold — so it is
+  // never rendered here. Those counts are asserted in the operation spec.
+  await expect(page.getByText("Total payments")).toHaveCount(0);
 
   // First page of the table: 10 rows of a 48-row dataset.
   const table = page.getByRole("table");
