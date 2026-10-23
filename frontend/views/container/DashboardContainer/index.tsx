@@ -120,12 +120,17 @@ export function DashboardContainer() {
     { enabled: canViewPayments },
   );
 
-  // A 401 from a protected call means the session is no longer valid — sign out.
+  // A *server* 401 from a protected call means the session is no longer valid —
+  // sign out. Client-side fast-fail 401s (`local`, raised when a call is made
+  // with no stored token) are ignored: they don't mean the server rejected the
+  // session, and a stale one left by a logout transition must not sign the user
+  // out of a freshly logged-in session.
+  const isServer401 = (err: unknown) =>
+    err instanceof ApiError && err.status === 401 && !err.local;
   const authError =
-    (summaryQuery.error instanceof ApiError &&
-      summaryQuery.error.status === 401) ||
-    (tableQuery.error instanceof ApiError && tableQuery.error.status === 401) ||
-    (meQuery.error instanceof ApiError && meQuery.error.status === 401);
+    isServer401(summaryQuery.error) ||
+    isServer401(tableQuery.error) ||
+    isServer401(meQuery.error);
   useEffect(() => {
     if (authError) logout();
   }, [authError, logout]);

@@ -5,10 +5,16 @@ import { getToken } from "./auth-storage";
 // auth failures (e.g. force a re-login on 401).
 export class ApiError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) {
+  // True when the error was raised client-side without reaching the server
+  // (e.g. a protected call attempted with no stored token). Such a 401 is a
+  // local precondition failure, not the server rejecting the session, so
+  // callers that force a re-login on 401 should ignore it.
+  readonly local: boolean;
+  constructor(status: number, message: string, options?: { local?: boolean }) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.local = options?.local ?? false;
   }
 }
 
@@ -47,7 +53,9 @@ export async function apiFetch<T>(
     // This avoids the confusing "no Authorization header" 401 that appears when
     // the session is cleared mid-flight (e.g. logout triggered by another call).
     if (!token) {
-      throw new ApiError(401, "Not authenticated: no session token.");
+      throw new ApiError(401, "Not authenticated: no session token.", {
+        local: true,
+      });
     }
     finalHeaders.set("Authorization", `Bearer ${token}`);
   }

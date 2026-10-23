@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLogin } from "@/services/auth";
 import { useAuth } from "@/hooks/use-auth";
 import { useAuthGuard } from "@/hooks/use-auth-guard";
@@ -21,6 +22,7 @@ const COOLDOWN_MS = 5 * 60 * 1000;
 // Smart component: wires the login mutation to the auth session and navigation.
 export function LoginContainer() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { setSession } = useAuth();
   const { ready, hydrated } = useAuthGuard("guest");
   const { toast } = useToast();
@@ -32,6 +34,13 @@ export function LoginContainer() {
     login.mutate(credentials, {
       onSuccess: (user) => {
         setSession(user);
+        // Start the new session from a clean cache. A previous logout clears the
+        // cache too, but while the dashboard is still mounted during that
+        // transition its (briefly still-enabled) queries can refetch without a
+        // token and cache a client-side 401 *after* that clear. Clearing again
+        // here drops any such stale error so it can't trip the dashboard's
+        // "401 => sign out" guard on the fresh session.
+        queryClient.clear();
         router.replace("/dashboard");
       },
       // API failures surface as toasts (not inline). A 429 additionally starts
